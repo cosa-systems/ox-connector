@@ -1,0 +1,66 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-only
+SPDX-FileCopyrightText: 2023 - 2025 Univention GmbH
+*/}}
+
+---
+kind: "ConfigMap"
+apiVersion: "v1"
+metadata:
+  name: "{{ include "common.names.fullname" . }}"
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels:
+    {{- include "common.labels.standard" ( dict "customLabels" .Values.additionalLabels "context" . ) | nindent 4 }}
+  {{- include "nubus-common.annotations.render" ( dict
+    "values" ( list .Values.additionalAnnotations )
+    "context" . )
+    | nindent 2 }}
+data:
+
+  PROVISIONING_API_BASE_URL: {{ .Values.provisioningApi.connection.baseUrl | quote }}
+  PROVISIONING_API_USERNAME: {{ .Values.provisioningApi.auth.username | quote }}
+  MAX_ACKNOWLEDGEMENT_RETRIES: {{ required "The parameter \".Values.provisioningApi.config.maxAcknowledgementRetries\" is required." .Values.provisioningApi.config.maxAcknowledgementRetries | quote }}
+
+  DOMAINNAME: "{{ .Values.openXchange.domainName }}"
+  OX_MASTER_ADMIN: "{{ .Values.openXchange.auth.username }}"
+  LOCAL_TIMEZONE: "{{ .Values.openXchange.oxLocalTimezone }}"
+  OX_LANGUAGE: "{{ .Values.openXchange.oxLanguage }}"
+  DEFAULT_CONTEXT: "{{ .Values.openXchange.oxDefaultContext }}"
+  OX_SMTP_SERVER: "{{ .Values.openXchange.oxSmtpServer }}"
+  OX_IMAP_SERVER: "{{ .Values.openXchange.oxImapServer }}"
+  OX_SOAP_SERVER: "{{ .Values.openXchange.oxSoapServer }}"
+  OX_ENABLE_DEPUTY_PERMISSIONS: "{{ .Values.openXchange.oxDeputyPermissions }}"
+  OX_ENABLE_SHARED_ACCOUNT: "{{ .Values.openXchange.oxSharedAccount }}"
+  OX_USER_IDENTIFIER: "{{ .Values.openXchange.mappings.userIdentifier }}"
+  OX_GROUP_IDENTIFIER: "{{ .Values.openXchange.mappings.groupIdentifier }}"
+  OX_SHARED_ACCOUNT_IDENTIFIER: "{{ .Values.openXchange.mappings.sharedAccountIdentifier }}"
+  LOG_LEVEL: "{{ .Values.openXchange.logLevel }}"
+  wait-for-api.sh: |
+    #!/bin/bash
+    set -uo pipefail
+
+    retry_interval=2
+    response_code=404
+    timeout_duration=120
+    end_time=$((SECONDS + timeout_duration))
+
+    while [ "$response_code" -ne 200 ]; do
+      if [ $SECONDS -ge $end_time ]; then
+        echo "Timeout reached. Exiting."
+        exit 1
+      fi
+
+      echo "Waiting for the Provisioning API to be available ..."
+      response_code=$(set +x; curl -s -o response.txt -w "%{http_code}" "${PROVISIONING_API_BASE_URL}/v1/subscriptions/${PROVISIONING_API_USERNAME}" -u "${PROVISIONING_API_USERNAME}":"${PROVISIONING_API_PASSWORD}")
+      if [ "${response_code}" -ne 200 ]; then
+        echo "Provisioning API is not reachable, status code: $response_code"
+        cat response.txt
+        sleep ${retry_interval}
+      else
+        echo "The Provisioning API is reachable"
+        exit 0
+      fi
+    done
+
+    echo "Permanent error ocurred. Exiting."
+    exit 1

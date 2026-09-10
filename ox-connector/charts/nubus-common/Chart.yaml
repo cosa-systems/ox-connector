@@ -1,0 +1,10 @@
+apiVersion: v2
+dependencies:
+- name: common
+  repository: https://charts.bitnami.com/bitnami
+  version: ^2.x.x
+description: Common utilities and fragments for Helm charts in Nubus
+home: https://git.knut.univention.de/univention/customers/dataport/upx/common-helm
+name: nubus-common
+type: library
+version: 0.24.2

@@ -1,0 +1,38 @@
+---
+
+ingress:
+  enabled: false
+
+openXchange:
+  domainName: "<value of DOMAINNAME>"
+  oxMasterAdmin: "oxadminmasters"
+  oxMasterPassword: "<value of OX_MASTER_PASSWORD>"
+  oxDefaultContext: "1"
+  oxSmtpServer: "smtp://127.0.0.1:587"
+  oxImapServer: "imap://127.0.0.1:143"
+  oxSoapServer: "<value of OX_SOAP_SERVER>"
+  logLevel: "DEBUG"
+
+provisioningApi:
+  connection:
+    baseUrl: "<value of PROVISIONING_API_BASE_URL>"
+  auth:
+    username: "ox-connector"
+    password: "password"
+
+oxConnector:
+  image:
+    registry: "registry.souvap-univention.de"
+    repository: "souvap/tooling/images/ox-connector/ox-connector-standalone"
+    pullPolicy: "Always"
+    tag: "0.0.1-dev-tilt"
+    sha256: null
+
+waitForDependency:
+  image:
+    registry: "artifacts.software-univention.de"
+    imagePullPolicy: "IfNotPresent"
+    repository: "nubus/images/wait-for-dependency"
+    tag: "0.32.1@sha256:44d45067e1d4e7a00d3b651e56df5177087e3206368a45cd1816d78ba7b21347"
+
+...

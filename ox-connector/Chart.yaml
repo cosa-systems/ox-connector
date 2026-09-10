@@ -1,0 +1,11 @@
+apiVersion: v2
+appVersion: 1.0.0
+dependencies:
+- name: nubus-common
+  repository: oci://artifacts.software-univention.de/nubus/charts
+  version: 0.24.2
+description: A Helm chart for the ox-connector
+home: https://www.univention.de/
+name: ox-connector
+type: application
+version: 0.42.1

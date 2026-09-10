@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2023 Univention GmbH
+
+---
+
+# Dummy values for running the Helm linter on the ox-connector.
+# Run it like this: helm lint -f values.yaml -f linter_values.yaml .
+
+
+## Application-specific
+# OX CONNECTOR
+openXchange:
+  domainName: "example.org"
+  auth:
+    username: "oxadminmaster"
+    password: "s3cr3t"
+  oxSmtpServer: "smtp://example.org:587"
+  oxImapServer: "imap://example.org:143"
+  oxSoapServer: "https://ox.example.org"
+  oxDbConnectionString: "dummy"
+
+# Provisioning API.
+provisioningApi:
+  connection:
+    baseUrl: ""
+  auth:
+    username: "ox-consumer"
+    password: "s3cr3t"
+  resync:
+    auth:
+      password: "univention"

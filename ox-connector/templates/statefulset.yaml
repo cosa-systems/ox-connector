@@ -1,0 +1,194 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-only
+SPDX-FileCopyrightText: 2023 - 2025 Univention GmbH
+*/}}
+
+---
+
+apiVersion: "apps/v1"
+kind: "StatefulSet"
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels:
+    {{- include "common.labels.standard" ( dict "customLabels" .Values.additionalLabels "context" . ) | nindent 4 }}
+  {{- include "nubus-common.annotations.render" ( dict
+    "values" ( list .Values.additionalAnnotations )
+    "context" . )
+    | nindent 2 }}
+spec:
+  serviceName: {{ include "common.names.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "common.labels.matchLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secrets-ox: {{ include (print $.Template.BasePath "/secret-ox-master-password.yaml") . | sha256sum }}
+        checksum/secrets-provisioning-api: {{ include (print $.Template.BasePath "/secret-provisioning-api.yaml") . | sha256sum }}
+        checksum/secrets-db: {{ include (print $.Template.BasePath "/secret-db-connection-string.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "common.labels.matchLabels" . | nindent 8 }}
+    spec:
+      {{- if or .Values.imagePullSecrets .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.global.imagePullSecrets }}
+        - name: {{ . | quote }}
+        {{- end }}
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      serviceAccountName: {{ include "common.names.fullname" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-provisioning-api
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/bash", "/scripts/wait-for-api.sh", "${PROVISIONING_API_BASE_URL}"]
+          image: "{{ coalesce .Values.waitForDependency.image.registry .Values.global.imageRegistry }}/{{ .Values.waitForDependency.image.repository }}:{{ .Values.waitForDependency.image.tag }}"
+          imagePullPolicy: {{ coalesce .Values.waitForDependency.image.pullPolicy .Values.global.imagePullPolicy | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "common.names.fullname" . }}
+          env:
+            - name: PROVISIONING_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: {{ include "nubus-common.secrets.key" (dict "existingSecret" .Values.provisioningApi.auth.existingSecret "key" "password") | quote }}
+                  name: {{ include "nubus-common.secrets.name" (dict "existingSecret" .Values.provisioningApi.auth.existingSecret "defaultNameSuffix" "provisioning-api" "context" .) | quote }}
+          {{- with .Values.oxConnector.extraEnvVars }}
+            {{- . | toYaml | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: wait-for-api
+              mountPath: /scripts
+          resources:
+            {{- toYaml .Values.resourcesWaitForDependency | nindent 12 }}
+        - name: init-db
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: [ "/usr/bin/python3", "/init-db.py" ]
+          image: "{{ coalesce .Values.oxConnector.image.registry .Values.global.imageRegistry }}/{{ .Values.oxConnector.image.repository }}:{{ .Values.oxConnector.image.tag }}"
+          imagePullPolicy: {{ coalesce .Values.oxConnector.image.pullPolicy .Values.global.imagePullPolicy | quote }}
+          envFrom:
+             - configMapRef:
+                 name: {{ include "common.names.fullname" . }}
+             - secretRef:
+                 name: {{ include "common.names.fullname" . }}-db-connection-string
+          env:
+            - name: PROVISIONING_API_RESYNC_ENABLED
+              value: {{ .Values.provisioningApi.resync.enabled | quote }}
+            {{- if .Values.provisioningApi.resync.enabled }}
+            - name: PROVISIONING_API_ADMIN_USERNAME
+              value: {{ .Values.provisioningApi.resync.auth.username | quote }}
+            {{- if and .Values.provisioningApi.resync.auth.existingSecret .Values.provisioningApi.resync.auth.existingSecret.name }}
+            - name: PROVISIONING_API_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: {{ include "nubus-common.secrets.key" (dict "existingSecret" .Values.provisioningApi.resync.auth.existingSecret "key" "password") | quote }}
+                  name: {{ include "nubus-common.secrets.name" (dict "existingSecret" .Values.provisioningApi.resync.auth.existingSecret "defaultNameSuffix" "resync" "context" .) | quote }}
+            {{- else }}
+            - name: PROVISIONING_API_ADMIN_PASSWORD
+              value: {{ .Values.provisioningApi.resync.auth.password | quote }}
+            {{- end }}
+            {{- end }}
+            - name: PROVISIONING_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: {{ include "nubus-common.secrets.key" (dict "existingSecret" .Values.provisioningApi.auth.existingSecret "key" "password") | quote }}
+                  name: {{ include "nubus-common.secrets.name" (dict "existingSecret" .Values.provisioningApi.auth.existingSecret "defaultNameSuffix" "provisioning-api" "context" .) | quote }}
+          {{- with .Values.oxConnector.extraEnvVars }}
+            {{- . | toYaml | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      containers:
+        - name: "main"
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ coalesce .Values.oxConnector.image.registry .Values.global.imageRegistry }}/{{ .Values.oxConnector.image.repository }}:{{ .Values.oxConnector.image.tag }}"
+          imagePullPolicy: {{ coalesce .Values.oxConnector.image.pullPolicy .Values.global.imagePullPolicy | quote }}
+          env:
+            - name: PROVISIONING_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: {{ include "nubus-common.secrets.key" (dict "existingSecret" .Values.provisioningApi.auth.existingSecret "key" "password") | quote }}
+                  name: {{ include "nubus-common.secrets.name" (dict "existingSecret" .Values.provisioningApi.auth.existingSecret "defaultNameSuffix" "provisioning-api" "context" .) | quote }}
+            - name: OX_MASTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: {{ include "nubus-common.secrets.key" (dict "existingSecret" .Values.openXchange.auth.existingSecret "key" "password") | quote }}
+                  name: {{ include "nubus-common.secrets.name" (dict "existingSecret" .Values.openXchange.auth.existingSecret "defaultNameSuffix" "ox-master-password" "context" .) | quote }}
+          {{- with .Values.oxConnector.extraEnvVars }}
+            {{- . | toYaml | nindent 12 }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "common.names.fullname" . }}
+            - secretRef:
+                name: {{ include "common.names.fullname" . }}-db-connection-string
+          volumeMounts:
+            - name: {{ include "common.names.fullname" . }}-ox-contexts
+              mountPath: /etc/ox-secrets
+            - name: {{ include "common.names.fullname" . }}-appcenter
+              mountPath: /var/lib/univention-appcenter/apps/ox-connector
+            {{- if .Values.extraVolumeMounts }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.extraVolumeMounts "context" .) | nindent 12 }}
+            {{- end }}
+          {{- if .Values.probes.liveness }}
+          livenessProbe: {{- omit .Values.probes.liveness "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.probes.readiness }}
+          readinessProbe: {{- omit .Values.probes.readiness "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: wait-for-api
+          configMap:
+            name: {{ include "common.names.fullname" . }}
+        {{- if .Values.extraVolumes }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.extraVolumes  "context" .) | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ include "common.names.fullname" . }}-ox-contexts
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+      {{- if .Values.persistence.storageClass }}
+      storageClassName: {{ .Values.persistence.storageClass | quote }}
+      {{- end }}
+  - metadata:
+      name: {{ include "common.names.fullname" . }}-appcenter
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+      {{- if .Values.persistence.storageClass }}
+      storageClassName: {{ .Values.persistence.storageClass | quote }}
+      {{- end }}
+
+...

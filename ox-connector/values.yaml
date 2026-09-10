@@ -1,0 +1,249 @@
+---
+# Default values for ox-connector.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# The global properties are used to configure multiple charts at once.
+global:
+  # -- Container registry address.
+  imageRegistry: "artifacts.software-univention.de"
+  # -- Credentials to fetch images from private registry.
+  # Ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+  #
+  # imagePullSecrets:
+  #   - "docker-registry"
+  imagePullSecrets: []
+
+  # -- Define an ImagePullPolicy.
+  #
+  # Ref.: https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy
+  #
+  # "IfNotPresent" => The image is pulled only if it is not already present locally.
+  # "Always" => Every time the kubelet launches a container, the kubelet queries the container image registry to
+  #             resolve the name to an image digest. If the kubelet has a container image with that exact digest cached
+  #             locally, the kubelet uses its cached image; otherwise, the kubelet pulls the image with the resolved
+  #             digest, and uses that image to launch the container.
+  # "Never" => The kubelet does not try fetching the image. If the image is somehow already present locally, the
+  #            kubelet attempts to start the container; otherwise, startup fails.
+  imagePullPolicy: null
+
+# Configuration for the communication with the provisioning API.
+provisioningApi:
+  config:
+    # -- The maximum number of retries for acknowledging a message
+    maxAcknowledgementRetries: 3
+  # -- Connection parameters
+  connection:
+    # -- The base URL the provisioning API is reachable at. (e.g. "https://provisioning-api")
+    baseUrl: ""
+  # -- Authentication parameters
+  auth:
+    # -- The username to authenticate with.
+    username: "ox-consumer"
+    # -- The password to authenticate with.
+    password: null
+    existingSecret:
+      # -- The name of an existing Secret to use for retrieving the password
+      # to authenticate with the Provisioning API.
+      #
+      # "provisioningApi.auth.password" will be ignored if this value is set.
+      name: null
+      keyMapping:
+        # -- The key to retrieve the password from. Setting this value allows to use
+        # a key with a different name.
+        password: null
+  resync:
+    # -- Enable the database resync on first startup only if database is empty.
+    enabled: true
+    auth:
+      # -- The admin username to authenticate with the Provisioning API
+      # for recreating the ox-connector subscriber.
+      username: "admin"
+      # -- The admin password to authenticate with the Provisioning API.
+      password: null
+      existingSecret:
+        # -- The name of an existing Secret to use for retrieving the password
+        # to authenticate with the Provisioning API.
+        #
+        # "provisioningApi.resync.auth.password" will be ignored if this value is set.
+        name: null
+        keyMapping:
+          # -- The key to retrieve the password from. Setting this value allows to use
+          # a key with a different name.
+          password: null
+
+oxConnector:
+  image:
+    pullPolicy: null
+    registry: null
+    repository: "nubus/images/ox-connector-standalone"
+    tag: "0.42.1@sha256:16a17bf4d2ca2074d16ec708798012c9543091028cd3bc5a10e1c8be4fb14a64"
+
+  # -- Array with extra environment variables to add to containers.
+  #
+  # extraEnvVars:
+  #   - name: FOO
+  #     value: "bar"
+  extraEnvVars: []
+
+# Configuration for OX CONNECTOR
+openXchange:
+  # -- OX-Mail-Domain to generate OX-email-addresses
+  domainName: null
+  auth:
+    # -- OX Admin username (the OX Admin can create, modify, delete contexts; has to exist)
+    username: "oxadminmaster"
+    # -- OX Admin password
+    password: null
+    existingSecret:
+      # -- The name of an existing Secret to use for retrieving the password
+      # for the ox admin password.
+      #
+      # "oxConnector.auth.password" will be ignored if this value is set.
+      name: null
+      keyMapping:
+        # -- The key to retrieve the password from. Setting this value allows to use
+        # a key with a different name.
+        password: null
+  # -- Default timezone for new users
+  oxLocalTimezone: "Europe/Berlin"
+  # -- Default language for new users
+  oxLanguage: "de_DE"
+  # -- Default context for users (has to exist)
+  oxDefaultContext: "10"
+  # -- Default SMTP server for new users (if not set explicitely there)
+  oxSmtpServer: null
+  # -- Default IMAP server for new users (if not set explicitely there)
+  oxImapServer: null
+  # -- The server where Open-Xchange is installed
+  oxSoapServer: null
+  # -- OX Connector log level
+  # Chose from "DEBUG", "INFO", "WARNING" and "ERROR".
+  logLevel: "INFO"
+  # -- Ox Connector deputy permissions flag.
+  oxDeputyPermissions: false
+  # -- Ox Connector shared account flag.
+  oxSharedAccount: true
+  # -- SQLAlchemy DB connection URL for the OX connector.
+  oxDbConnectionString: null
+  mappings:
+    # -- UDM user property that is used as the unique user identifier for OX
+    userIdentifier: "username"
+    # -- UDM group property that is used as the unique group identifier for OX
+    groupIdentifier: "name"
+    # -- UDM shared account property that is used as the unique account identifier for OX
+    sharedAccountIdentifier: "name"
+
+waitForDependency:
+  image:
+    pullPolicy: null
+    registry: null
+    repository: "nubus/images/wait-for-dependency"
+    tag: "0.36.12@sha256:7150d72c8f342a05b945ce1b21464864aa91590d00f65ebe4b628571cce34efc"
+
+# Set PVCs size and storage class
+persistence:
+  # -- Specify storageClassName - Leave empty to use the default storage class
+  storageClass: ""
+  # -- Specify PVCs size
+  size: 1Gi
+
+## Global values
+affinity: {}
+environment: {}
+fullnameOverride: ""
+nameOverride: ""
+nodeSelector: {}
+podAnnotations: {}
+replicaCount: 1
+tolerations: []
+
+# -- Optionally specify an extra list of additional volumes.
+extraVolumes: []
+
+# -- Optionally specify an extra list of additional volumeMounts.
+extraVolumeMounts: []
+
+## Container deployment probes
+probes:
+  liveness:
+    initialDelaySeconds: 120
+    timeoutSeconds: 3
+    periodSeconds: 30
+    failureThreshold: 3
+    successThreshold: 1
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          exit 0
+
+  readiness:
+    initialDelaySeconds: 30
+    timeoutSeconds: 3
+    periodSeconds: 15
+    failureThreshold: 30
+    successThreshold: 1
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          exit 0
+
+## Deployment resources
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "4Gi"
+    cpu: "4"
+
+# -- Deployment resources for the dependency waiters
+resourcesWaitForDependency:
+  requests:
+    memory: "64Mi"
+    cpu: "100m"
+  limits:
+    memory: "128Mi"
+    cpu: "200m"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+  ## @param serviceAccount.automountServiceAccountToken Allows auto mount of
+  # ServiceAccountToken on the serviceAccount created
+  ## Can be set to false if pods using this serviceAccount do not need to use K8s API
+  ##
+  automountServiceAccountToken: false
+  # -- Additional custom labels for the ServiceAccount.
+  labels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: "RuntimeDefault"
+
+securityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: "RuntimeDefault"
+  capabilities:
+    drop:
+      - "ALL"
+...
